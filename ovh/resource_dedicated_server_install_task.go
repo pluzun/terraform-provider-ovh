@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -16,6 +17,9 @@ func resourceDedicatedServerInstallTask() *schema.Resource {
 		Update: resourceDedicatedServerInstallTaskUpdate,
 		Read:   resourceDedicatedServerInstallTaskRead,
 		Delete: resourceDedicatedServerInstallTaskDelete,
+		Importer: &schema.ResourceImporter{
+			State: resourceDedicatedServerInstallTaskImportState,
+		},
 
 		Timeouts: &schema.ResourceTimeout{
 			Create: schema.DefaultTimeout(45 * time.Minute),
@@ -284,4 +288,41 @@ func resourceDedicatedServerInstallTaskDelete(d *schema.ResourceData, meta inter
 	// we cant delete the task through the API, just forget about its Id
 	d.SetId("")
 	return nil
+}
+
+func resourceDedicatedServerInstallTaskImportState(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	givenId := d.Id()
+	splitId := strings.SplitN(givenId, "/", 3)
+
+	if len(splitId) != 3 {
+		return nil, fmt.Errorf("import id is not service_name/template_name/hostname formatted")
+	}
+
+	serviceName := splitId[0]
+	templateName := splitId[1]
+	hostname := splitId[2]
+
+	details := make([]map[string]interface{}, 1)
+	details[0] = map[string]interface{}{
+		"custom_hostname": hostname,
+	}
+
+	currentDate := time.Now()
+
+	d.SetId("0")
+	d.Set("service_name", serviceName)
+	d.Set("template_name", templateName)
+	d.Set("bootid_on_destroy", 1122) // Hardcoded - this is rescue-pro
+	d.Set("function", "reinstallServer")
+	d.Set("comment", "Imported by terraform-import")
+	d.Set("status", "done")
+	d.Set("last_update", currentDate.Format(time.RFC3339))
+	d.Set("done_date", currentDate.Format(time.RFC3339))
+	d.Set("start_date", currentDate.Format(time.RFC3339))
+	d.Set("details", details)
+
+	results := make([]*schema.ResourceData, 1)
+	results[0] = d
+
+	return results, nil
 }
